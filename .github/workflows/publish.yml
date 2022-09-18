@@ -1,0 +1,53 @@
+name: Publish
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  release:
+    name: Release
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        kind: ['linux', 'windows', 'macOS']
+        include:
+          - kind: linux
+            os: ubuntu-latest
+            target: linux-x64
+          - kind: windows
+            os: windows-latest
+            target: win-x64
+          - kind: macOS
+            os: macOS-latest
+            target: osx-x64
+
+    steps:
+      - uses: actions/checkout@v2
+      - name: Setup dotnet 3.1
+        uses: actions/setup-dotnet@v1
+        with:
+          dotnet-version: 3.1
+      - name: Build
+        shell: bash
+        run: |
+          # Build everything
+          dotnet publish -c Release -r ${{ matrix.target }} -o ${{ matrix.target }} --self-contained true -p:PublishSingleFile=true -p:DebugType=None
+
+          # Pack files
+          if [ "${{ matrix.target }}" == "win-x64" ]; then
+            # Pack to zip for Windows
+            7z a -tzip "${{ matrix.target }}.zip" "${{ matrix.target }}/gzipconv.exe"
+          else
+          tar czvf "${{ matrix.target }}.tar.gz" "${{ matrix.target }}/gzipconv"
+          fi
+          
+          # Delete output directory
+          rm -r "${{ matrix.target }}"
+      - name: Publish
+        uses: softprops/action-gh-release@v1
+        with:
+          files: "${{ matrix.target }}*"
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
